@@ -1,7 +1,8 @@
 -- dump_env_all_54_userdata.lua  (Lua 5.4)
--- Version basée sur ton script qui marche, avec en plus :
+-- Version avec :
 --   - dump des userdata sous forme :
 --       { __userdata = "userdata: 0x...", __metatable = { ... } }
+--   - dump des types "dict" et "list" via dictlib/listlib
 --   - aucune utilisation de pairs()/next sur autre chose qu'une vraie table
 
 local ok, err = pcall(function()
@@ -13,7 +14,7 @@ local ok, err = pcall(function()
   local DUMP_PATH   = rawget(_G, "DUMP_PATH")
                     or "C:\\temp\\Where Winds Meet\\env_full_dump.lua"
 
-  local DUMP_DEPTH  = tonumber(rawget(_G, "DUMP_DEPTH")) or 8   -- profondeur max
+  local DUMP_DEPTH  = tonumber(rawget(_G, "DUMP_DEPTH")) or 16   -- profondeur max
   local PRETTY      = (rawget(_G, "DUMP_PRETTY") ~= false)      -- pretty-print
 
   -- Racine par défaut : package.loaded (modules chargés)
@@ -36,6 +37,11 @@ local ok, err = pcall(function()
   local io       = io
   local next     = next
   local ipairs   = ipairs
+
+  -- libs python-like
+  local listlib  = rawget(_G, "listlib")
+  local dictlib  = rawget(_G, "dictlib")
+  local len_fn   = rawget(_G, "len")
 
   local format = string.format
   local rep    = string.rep
@@ -132,7 +138,18 @@ local ok, err = pcall(function()
        and not RESERVED[s]
   end
 
-  -- Gestion des cycles + déduplication
+  -- Clés à ignorer complètement dans le dump
+  -- Tu peux étendre cette table ou la surcharger via _G.DUMP_IGNORE_KEYS
+  local IGNORE_KEYS = rawget(_G, "DUMP_IGNORE_KEYS") or {
+    gm_command_short_cuts = true,
+    gm_command_ui_components = true,
+  }
+
+  local function should_ignore_key(k)
+    return type(k) == "string" and IGNORE_KEYS[k] == true
+  end
+
+  -- Gestion des cycles + déduplication (pour les tables Lua)
   local VISITING = setmetatable({}, { __mode = "k" })
   local TIDS     = setmetatable({}, { __mode = "k" })
   local ENCODED  = setmetatable({}, { __mode = "k" })  -- bool : déjà dumpé en entier
@@ -163,6 +180,8 @@ local ok, err = pcall(function()
 
   -- forward decl
   local encode_value
+  local encode_dict
+  local encode_list
 
   -- Encodage minimal de userdata : adresse + metatable (si table)
   local function encode_userdata(u, depth, indent)
@@ -202,6 +221,217 @@ local ok, err = pcall(function()
     end
   end
 
+  -- Encodage d'un "dict" Python-like via dictlib + listlib
+  local function encode_dict(d, depth, indent)
+    depth  = depth or 0
+    indent = indent or 0
+
+    if depth >= DUMP_DEPTH then
+      return q("<dict>")
+    end
+
+    if not (dictlib and type(dictlib.items) == "function") then
+      return q(safe_tostring(d))
+    end
+
+    local ok_items, items = pcall(dictlib.items, d)
+    if not ok_items or items == nil then
+      return q(safe_tostring(d))
+    end
+
+    local sp  = PRETTY and rep("  ", indent) or ""
+    local nl  = PRETTY and "\n" or ""
+    local parts = {}
+
+    local function key_repr(k)
+      local kt = type(k)
+      if kt == "string" and is_ident(k) then
+        return k .. " = "
+      elseif kt == "string" then
+        return "[" .. q(k) .. "] = "
+      elseif kt == "number" then
+        if k ~= k or k == math.huge or k == -math.huge then
+          return "[" .. q("<number>") .. "] = "
+        else
+          return "[" .. tostring(k) .. "] = "
+        end
+      elseif kt == "boolean" then
+        return "[" .. (k and "true" or "false") .. "] = "
+      else
+        return "[" .. q("<key:" .. safe_tostring(k) .. ">") .. "] = "
+      end
+    end
+
+    local function add_pair(k, v)
+      if should_ignore_key(k) then
+        return
+      end
+      local kr = key_repr(k)
+      local ev = encode_value(v, depth + 1, indent + 1)
+      if PRETTY then
+        parts[#parts+1] = sp .. "  " .. kr .. ev
+      else
+        parts[#parts+1] = kr .. ev
+      end
+    end
+
+    local used_fallback = false
+
+    -- items est typiquement un "list" Python -> iterunpack donne (idx, key, value)
+    if listlib and type(listlib.iterunpack) == "function" then
+      local ok_iter, it, st, fst = pcall(listlib.iterunpack, items)
+      if ok_iter and type(it) == "function" then
+        local ok_loop = pcall(function()
+          for idx, key, value in it, st, fst do
+            add_pair(key, value)
+          end
+        end)
+        if not ok_loop then
+          used_fallback = true
+        end
+      else
+        used_fallback = true
+      end
+    else
+      used_fallback = true
+    end
+
+    -- fallback si items est une table Lua de paires [k,v]
+    if used_fallback then
+      if type(items) == "table" then
+        for _, pair in ipairs(items) do
+          if type(pair) == "table" then
+            add_pair(pair[1], pair[2])
+          end
+        end
+      else
+        return q(safe_tostring(d))
+      end
+    end
+
+    if PRETTY then
+      return "{" .. nl .. concat(parts, "," .. nl) .. nl .. sp .. "}"
+    else
+      return "{" .. concat(parts, ",") .. "}"
+    end
+  end
+
+  -- Encodage d'un "list" Python-like via listlib.iterunpack
+  local function encode_list(lst, depth, indent)
+    depth  = depth or 0
+    indent = indent or 0
+
+    if depth >= DUMP_DEPTH then
+      return q("<list>")
+    end
+
+    if not listlib then
+      return q(safe_tostring(lst))
+    end
+
+    local sp  = PRETTY and rep("  ", indent) or ""
+    local nl  = PRETTY and "\n" or ""
+    local parts = {}
+
+    local function add_value(v)
+      local ev = encode_value(v, depth + 1, indent + 1)
+      if PRETTY then
+        parts[#parts+1] = sp .. "  " .. ev
+      else
+        parts[#parts+1] = ev
+      end
+    end
+
+    local function finish_if_any()
+      if #parts == 0 then
+        return nil
+      end
+      if PRETTY then
+        return "{" .. nl .. concat(parts, "," .. nl) .. nl .. sp .. "}"
+      else
+        return "{" .. concat(parts, ",") .. "}"
+      end
+    end
+
+    -- ==========================
+    -- 1) Tentative via iterunpack
+    -- ==========================
+    if type(listlib.iterunpack) == "function" then
+      local ok_iter, it, st, fst = pcall(listlib.iterunpack, lst)
+      if ok_iter and type(it) == "function" then
+        local ok_loop = pcall(function()
+          for idx, a, b, c, d, e in it, st, fst do
+            local value
+            if b == nil and c == nil and d == nil and e == nil then
+              -- cas classique: list [val1, val2, ...] -> iterunpack : idx, val
+              value = a
+            else
+              -- cas "tuple" : on emballe (a,b,c,...) dans une petite table
+              local tup = {}
+              if a ~= nil then tup[#tup+1] = a end
+              if b ~= nil then tup[#tup+1] = b end
+              if c ~= nil then tup[#tup+1] = c end
+              if d ~= nil then tup[#tup+1] = d end
+              if e ~= nil then tup[#tup+1] = e end
+              value = tup
+            end
+            add_value(value)
+          end
+        end)
+
+        if ok_loop then
+          local res = finish_if_any()
+          if res then
+            return res
+          end
+        end
+
+        -- si la boucle a planté ou n'a rien produit, on nettoie et on tente autre chose
+        parts = {}
+      end
+    end
+
+    -- =========================================
+    -- 2) Fallback : len() + indexation numérique
+    --    (beaucoup de "list" supportent lst[i])
+    -- =========================================
+    if len_fn then
+      local ok_len, n = pcall(len_fn, lst)
+      if ok_len and type(n) == "number" and n > 0 then
+        -- heuristique très simple : 0-based ou 1-based ?
+        local base = 1
+        local ok0, v0 = pcall(function() return lst[0] end)
+        local ok1, v1 = pcall(function() return lst[1] end)
+        if ok0 and v0 ~= nil and (not ok1 or v1 == nil) then
+          base = 0
+        end
+
+        local ok_loop = pcall(function()
+          for i = 0, n - 1 do
+            local idx = base + i
+            local ok_v, v = pcall(function() return lst[idx] end)
+            if ok_v and v ~= nil then
+              add_value(v)
+            end
+          end
+        end)
+
+        if ok_loop then
+          local res = finish_if_any()
+          if res then
+            return res
+          end
+        end
+      end
+    end
+
+    -- ===================
+    -- 3) Dernier recours
+    -- ===================
+    return q(safe_tostring(lst))
+  end
+
+  -- ================== encode_value ==================
   function encode_value(v, depth, indent)
     depth  = depth or 0
     indent = indent or 0
@@ -224,13 +454,20 @@ local ok, err = pcall(function()
       return q(v)
     elseif t == "function" or t == "thread" then
       return q(addr_repr(v))
+    elseif t == "dict" then
+      -- nouveau : dump complet d'un dict Python-like
+      return encode_dict(v, depth, indent)
+    elseif t == "list" then
+      -- nouveau : dump complet d'une list Python-like
+      return encode_list(v, depth, indent)
     elseif t == "userdata" then
       return encode_userdata(v, depth, indent)
     elseif t ~= "table" then
+      -- autres types exotiques, on se contente d'une string
       return q(safe_tostring(v))
     end
 
-    -- Table
+    -- Table Lua
     local id = tid_for(v)
 
     if ENCODED[v] then
@@ -263,7 +500,9 @@ local ok, err = pcall(function()
     local hkeys = {}
     for k,_ in next, v do
       if not (type(k)=="number" and k%1==0 and k>=1 and k<=n) then
-        hkeys[#hkeys+1] = k
+        if not should_ignore_key(k) then
+          hkeys[#hkeys+1] = k
+        end
       end
     end
     sort(hkeys, cmp_keys)
@@ -306,6 +545,7 @@ local ok, err = pcall(function()
       return "{" .. concat(parts, ",") .. "}"
     end
   end
+
 
   -- ======= Dump principal =======
   local function dump_env_to_lua_file()
