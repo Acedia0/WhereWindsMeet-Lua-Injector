@@ -14,7 +14,7 @@ local ok, err = pcall(function()
   local DUMP_PATH   = rawget(_G, "DUMP_PATH")
                     or "C:\\temp\\Where Winds Meet\\env_full_dump.lua"
 
-  local DUMP_DEPTH  = tonumber(rawget(_G, "DUMP_DEPTH")) or 16   -- profondeur max
+  local DUMP_DEPTH  = tonumber(rawget(_G, "DUMP_DEPTH")) or 12   -- profondeur max
   local PRETTY      = (rawget(_G, "DUMP_PRETTY") ~= false)      -- pretty-print
 
   -- Racine par défaut : package.loaded (modules chargés)
@@ -588,3 +588,4 @@ if not ok then
     ef:close()
   end
 end
+
