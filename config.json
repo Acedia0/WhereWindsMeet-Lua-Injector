@@ -1,0 +1,63 @@
+{
+  "project_name": "WhereWindsMeet-Lua-Frida-Injector",
+  "version": "2.0.0",
+  "author": "Community",
+  
+  "paths": {
+    "game_exe": "wwm.exe",
+    "project_root": "C:\\temp\\Where Winds Meet",
+    "scripts_dir": "Scripts",
+    "logs_dir": "Logs",
+    "frida_log": "frida_hook_log.json"
+  },
+  
+  "frida": {
+    "host": "127.0.0.1",
+    "port": 27042,
+    "timeout": 30,
+    "auto_resume": false
+  },
+  
+  "injection": {
+    "hotkey": "1",
+    "entry_script": "Test.lua",
+    "auto_inject": false,
+    "inject_delay": 0
+  },
+  
+  "features": {
+    "esp": {
+      "enabled": false,
+      "auto_start": false,
+      "max_distance": 100,
+      "update_interval": 0.5,
+      "categories": {
+        "npcs": true,
+        "enemies": true,
+        "items": true,
+        "resources": true,
+        "chests": true,
+        "quest_objects": true
+      }
+    },
+    "debug": {
+      "enable_console": true,
+      "enable_gm_menu": true,
+      "enable_debug_flags": true
+    },
+    "advanced": {
+      "speed_hack": false,
+      "jump_hack": false,
+      "infinite_stamina": false,
+      "no_fall_damage": false,
+      "god_mode": false
+    }
+  },
+  
+  "logging": {
+    "enabled": true,
+    "level": "info",
+    "max_file_size_mb": 10,
+    "keep_logs_days": 7
+  }
+}
