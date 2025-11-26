@@ -32,8 +32,12 @@ Example layout:
 ```text
 C:\temp\Where Winds Meet\
 │
+├─ Config\
+│   └─ cheat_config.lua        # Configurable cheat settings
+│
 ├─ Scripts\
 │   └─ Test.lua                # Example Lua test script (entry point)
+│   └─ CheatController.lua     # This fork's cheat logic
 │
 ├─ dinput8.dll                 # Proxy DLL, placed next to wwm.exe (game folder)
 ├─ frida-gadget.config         # Frida Gadget configuration
@@ -108,7 +112,23 @@ From there, Frida Gadget injects `hook.js` into the `wwm.exe` process.
      - Toggle debug flags
      - Patch game tables, etc.
 
+## 🔧 Configuration (`cheat_config.lua`)
 
+All cheat settings are controlled through:
+```bash
+C:\temp\Where Winds Meet\Config\cheat_config.lua
+```
+- Open this file in any text editor and modify the values as needed. Example:
+```lua
+return {
+    GodMode = true,
+    InfiniteStamina = true,
+    DamageBonus = 10,
+    RecoverStatus = true,
+}
+```
+- Save the file after making your changes.
+- Press "1" to reload changes when playing game.
 ---
 
 ## Requirements
@@ -150,8 +170,11 @@ C:\temp\Where Winds Meet\
 │   frida-gadget.config
 │   hook.js
 │   Loader_gadget.py
+├─ Config\
+│   └─ cheat_config.lua
 └── Scripts\
     └── Test.lua
+    └─ CheatController.lua
 ```
 
 ### 2. Drop the proxy DLL into the game folder

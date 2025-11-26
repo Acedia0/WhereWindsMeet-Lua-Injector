@@ -5,8 +5,8 @@ if (Process.platform !== 'windows' || Process.arch !== 'x64')
 
 /* ========= CONFIG ========= */
 
-const MODULE      = "wwm.exe";
-const HOTKEY_VK   = 0x31; // key '1'
+const MODULE = "wwm.exe";
+const HOTKEY_VK = 0x31; // key '1'
 const TEST_PATH   = "C:\\temp\\Where Winds Meet\\Scripts\\Test.lua";
 
 /* ========= Injected Lua script (minimal loader) ========= */
@@ -36,7 +36,7 @@ const is64 = Process.pointerSize === 8;
 
 function writeSize(ptr, v) {
   if (is64) ptr.writeU64(v);
-  else      ptr.writeU32(v);
+  else ptr.writeU32(v);
 }
 
 function readSize(ptr) {
@@ -47,7 +47,7 @@ const NULL_PTR = ptr(0);
 
 /* ========= Function resolution ========= */
 
-const mod  = Process.getModuleByName(MODULE);
+const mod = Process.getModuleByName(MODULE);
 const base = mod.base;
 
 function scan(sig, name) {
@@ -67,7 +67,7 @@ const SIG_LUA_LOAD =
 const SIG_LUA_PCALL =
   "48 89 74 24 18 57 48 83 EC 40 33 F6 48 89 6C 24 58 49 63 C1 41 8B E8 48 8B F9 45 85 C9";
 
-const lua_load_addr  = scan(SIG_LUA_LOAD,  "lua_load");
+const lua_load_addr = scan(SIG_LUA_LOAD, "lua_load");
 const lua_pcall_addr = scan(SIG_LUA_PCALL, "lua_pcall");
 
 if (!lua_load_addr || !lua_pcall_addr)
@@ -91,8 +91,8 @@ const lua_pcall = new NativeFunction(
 */
 
 const luaReader = new NativeCallback(function (L, data, pSize) {
-  const ls        = data;
-  const sPtr      = ls;                          // field s
+  const ls = data;
+  const sPtr = ls;                          // field s
   const sizeField = ls.add(Process.pointerSize); // field size
 
   let remaining = readSize(sizeField);
@@ -110,7 +110,7 @@ const luaReader = new NativeCallback(function (L, data, pSize) {
 /* ========= Lua loader buffer + reusable LoadS ========= */
 
 const CHUNK_NAME = Memory.allocUtf8String("=(inject)");
-const MODE_TEXT  = Memory.allocUtf8String("t");  // "t" = text only
+const MODE_TEXT = Memory.allocUtf8String("t");  // "t" = text only
 
 // Loader script buffer
 const SCRIPT_BUF = Memory.allocUtf8String(LUA_CHUNK_SOURCE);
@@ -132,7 +132,7 @@ function prepareLoadS() {
 /* ========= Injection into the game thread ========= */
 
 let pendingInject = false;  // armed by key 1
-let inInjection   = false;  // avoid recursion
+let inInjection = false;  // avoid recursion
 
 function injectOnState(L) {
   if (SCRIPT_LEN === 0) {
@@ -168,7 +168,7 @@ Interceptor.attach(lua_pcall_addr, {
       return;
 
     pendingInject = false;
-    inInjection   = true;
+    inInjection = true;
 
     try {
       const L = args[0];
